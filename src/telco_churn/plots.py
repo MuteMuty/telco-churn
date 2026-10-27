@@ -7,12 +7,13 @@ import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from matplotlib.ticker import PercentFormatter
+from matplotlib.ticker import FuncFormatter, PercentFormatter
 
 from telco_churn.data import TARGET
 
 STAYED_COLOR = "#2a78d6"
 CHURNED_COLOR = "#eb6834"
+NEUTRAL_COLOR = "#8a8983"
 TEXT_COLOR = "#0b0b0b"
 MUTED_COLOR = "#52514e"
 GRID_COLOR = "#e4e3df"
@@ -52,6 +53,19 @@ def churn_rate_by(df: pd.DataFrame, column: str) -> pd.DataFrame:
     )
 
 
+def churn_rate_gaps(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+    """Gap between the highest and lowest churn rate within each column, largest first.
+
+    A rough first look at how strongly a feature separates churners; it ignores
+    overlap between features, so it is not a measure of feature importance.
+    """
+    gaps = {}
+    for column in columns:
+        rates = churn_rate_by(df, column)["churn_rate"]
+        gaps[column] = rates.max() - rates.min()
+    return pd.Series(gaps, name="churn_rate_gap").sort_values(ascending=False)
+
+
 def plot_target_distribution(y: pd.Series, ax: Axes | None = None) -> Axes:
     """Bar chart of customers who stayed vs churned."""
     ax = ax or plt.subplots(figsize=(5, 3.5))[1]
@@ -78,7 +92,9 @@ def plot_churn_rate(
     overall = df[TARGET].mean()
     ax = ax or plt.subplots(figsize=(6, 0.5 * len(rates) + 1))[1]
 
-    labels = [f"{value}  (n={n:,})" for value, n in zip(rates.index, rates["customers"])]
+    labels = [
+        f"{value}  (n={n:,})" for value, n in zip(rates.index, rates["customers"])
+    ]
     bars = ax.barh(labels, rates["churn_rate"], color=CHURNED_COLOR, height=0.6)
     ax.bar_label(bars, labels=[f"{r:.0%}" for r in rates["churn_rate"]], padding=3)
     ax.axvline(overall, color=MUTED_COLOR, linestyle="--", linewidth=1)
@@ -117,6 +133,25 @@ def plot_churn_rate_grid(
     return fig
 
 
+def plot_churn_rate_gaps(gaps: pd.Series, ax: Axes | None = None) -> Axes:
+    """Rank features by their churn rate gap (see `churn_rate_gaps`)."""
+    # barh draws from the bottom up, so sort ascending to put the largest gap on top
+    gaps = gaps.sort_values()
+    ax = ax or plt.subplots(figsize=(6, 0.3 * len(gaps) + 1))[1]
+
+    bars = ax.barh(gaps.index, gaps, color=NEUTRAL_COLOR, height=0.6)
+    ax.bar_label(bars, labels=[f"{g * 100:.0f}" for g in gaps], padding=3)
+
+    ax.set_title("How strongly each feature separates churners")
+    ax.set_xlabel(
+        "Highest minus lowest churn rate within the feature (percentage points)"
+    )
+    ax.set_xlim(0, gaps.max() * 1.12)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x * 100:.0f}"))
+    ax.grid(axis="y", visible=False)
+    return ax
+
+
 def plot_numeric_by_churn(
     df: pd.DataFrame, column: str, ax: Axes | None = None, bins: int = 30
 ) -> Axes:
@@ -128,7 +163,10 @@ def plot_numeric_by_churn(
     ax = ax or plt.subplots(figsize=(5, 3.5))[1]
     edges = np.histogram_bin_edges(df[column], bins=bins)
 
-    for value, label, color in [(0, "Stayed", STAYED_COLOR), (1, "Churned", CHURNED_COLOR)]:
+    for value, label, color in [
+        (0, "Stayed", STAYED_COLOR),
+        (1, "Churned", CHURNED_COLOR),
+    ]:
         ax.hist(
             df.loc[df[TARGET] == value, column],
             bins=edges,
