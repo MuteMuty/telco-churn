@@ -8,6 +8,12 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, PercentFormatter
+from sklearn.calibration import CalibrationDisplay
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    PrecisionRecallDisplay,
+    RocCurveDisplay,
+)
 
 from telco_churn.data import TARGET
 
@@ -190,4 +196,174 @@ def plot_numeric_by_churn(
     ax.set_ylabel("Density")
     ax.set_yticks([])
     ax.legend()
+    return ax
+
+
+# --- Model evaluation (step 5) ---
+
+
+def plot_roc_pr_curves(
+    y_true: pd.Series, proba: np.ndarray, threshold: float
+) -> Figure:
+    """ROC and precision-recall curves with their random baselines.
+
+    The dot marks where the chosen threshold sits on each curve.
+    """
+    fig, (ax_roc, ax_pr) = plt.subplots(1, 2, figsize=(11, 4.5))
+    curve_style = {"color": STAYED_COLOR, "linewidth": 2}
+    chance_style = {"color": NEUTRAL_COLOR, "linestyle": "--", "linewidth": 1}
+
+    RocCurveDisplay.from_predictions(
+        y_true,
+        proba,
+        ax=ax_roc,
+        name="Model",
+        curve_kwargs=curve_style,
+        plot_chance_level=True,
+        chance_level_kw=chance_style,
+    )
+    PrecisionRecallDisplay.from_predictions(
+        y_true,
+        proba,
+        ax=ax_pr,
+        name="Model",
+        curve_kwargs=curve_style,
+        plot_chance_level=True,
+        chance_level_kw=chance_style,
+    )
+
+    # where the chosen threshold sits on each curve
+    y_true = np.asarray(y_true)
+    predicted = proba >= threshold
+    recall = predicted[y_true == 1].mean()
+    false_positive_rate = predicted[y_true == 0].mean()
+    precision = y_true[predicted].mean()
+    for ax, x, y in [
+        (ax_roc, false_positive_rate, recall),
+        (ax_pr, recall, precision),
+    ]:
+        ax.plot(
+            x,
+            y,
+            "o",
+            color=CHURNED_COLOR,
+            markersize=8,
+            label=f"threshold {threshold:.2f}",
+        )
+        ax.legend(loc="lower right" if ax is ax_roc else "upper right")
+
+    ax_roc.set_title("ROC curve")
+    ax_roc.set_xlabel("False positive rate (share of stayers flagged)")
+    ax_roc.set_ylabel("True positive rate (recall)")
+    ax_pr.set_title("Precision-recall curve")
+    ax_pr.set_xlabel("Recall (share of churners caught)")
+    ax_pr.set_ylabel("Precision (share of flagged who churn)")
+    fig.tight_layout()
+    return fig
+
+
+def plot_confusion_matrix(
+    y_true: pd.Series, proba: np.ndarray, threshold: float, ax: Axes | None = None
+) -> Axes:
+    """Confusion matrix of the predictions at `threshold`."""
+    display = ConfusionMatrixDisplay.from_predictions(
+        y_true,
+        (proba >= threshold).astype(int),
+        display_labels=["Stayed", "Churned"],
+        cmap="Blues",
+        colorbar=False,
+        ax=ax,
+    )
+    display.ax_.set_title(f"Confusion matrix at threshold {threshold:.2f}")
+    display.ax_.set_xlabel("Predicted")
+    display.ax_.set_ylabel("Actual")
+    display.ax_.grid(False)
+    return display.ax_
+
+
+def plot_threshold_tradeoff(
+    table: pd.DataFrame, threshold: float, ax: Axes | None = None
+) -> Axes:
+    """Precision, recall and share of customers flagged across thresholds."""
+    # skip thresholds that flag almost nobody: precision gets noisy there
+    table = table[table["flagged_share"] >= 0.01]
+    ax = ax or plt.subplots(figsize=(7, 4))[1]
+
+    ax.plot(
+        table.index, table["precision"], color=STAYED_COLOR, lw=2, label="Precision"
+    )
+    ax.plot(table.index, table["recall"], color=CHURNED_COLOR, lw=2, label="Recall")
+    ax.plot(
+        table.index,
+        table["flagged_share"],
+        color=NEUTRAL_COLOR,
+        lw=2,
+        linestyle="--",
+        label="Customers flagged",
+    )
+    ax.axvline(0.5, color=NEUTRAL_COLOR, linestyle=":", linewidth=1)
+    ax.axvline(threshold, color=TEXT_COLOR, linestyle="--", linewidth=1)
+    ax.annotate(
+        f"chosen {threshold:.2f}",
+        (threshold, 1.0),
+        xytext=(-4, 0),
+        textcoords="offset points",
+        ha="right",
+        va="top",
+    )
+    ax.annotate(
+        "default 0.5",
+        (0.5, 1.0),
+        xytext=(4, 0),
+        textcoords="offset points",
+        va="top",
+        color=MUTED_COLOR,
+    )
+
+    ax.set_title("Choosing the decision threshold")
+    ax.set_xlabel("Threshold (flag a customer if churn probability ≥ threshold)")
+    ax.set_ylim(0, 1.05)
+    ax.yaxis.set_major_formatter(PercentFormatter(1.0))
+    ax.legend(loc="center right")
+    return ax
+
+
+def plot_feature_importance(importances: pd.DataFrame, ax: Axes | None = None) -> Axes:
+    """Horizontal bars of permutation importance, with the std as error bars."""
+    # barh draws from the bottom up, so reverse to put the largest on top
+    importances = importances.iloc[::-1]
+    ax = ax or plt.subplots(figsize=(7, 0.3 * len(importances) + 1))[1]
+
+    ax.barh(
+        importances.index,
+        importances["importance"],
+        xerr=importances["std"],
+        color=NEUTRAL_COLOR,
+        height=0.6,
+        error_kw={"ecolor": MUTED_COLOR, "elinewidth": 1},
+    )
+    ax.axvline(0, color=MUTED_COLOR, linewidth=0.8)
+    ax.set_title("What drives the predictions? (permutation importance)")
+    ax.set_xlabel("Drop in PR-AUC when the feature is shuffled")
+    ax.grid(axis="y", visible=False)
+    return ax
+
+
+def plot_calibration(
+    y_true: pd.Series, proba: np.ndarray, ax: Axes | None = None
+) -> Axes:
+    """Predicted probability vs actual churn rate, in 10 equal-sized groups of customers."""
+    ax = ax or plt.subplots(figsize=(5, 5))[1]
+    CalibrationDisplay.from_predictions(
+        y_true,
+        proba,
+        n_bins=10,
+        strategy="quantile",
+        name="Model",
+        ax=ax,
+        color=STAYED_COLOR,
+    )
+    ax.set_title("Are the probabilities honest?")
+    ax.set_xlabel("Average predicted churn probability")
+    ax.set_ylabel("Actual churn rate")
     return ax
