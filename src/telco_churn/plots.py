@@ -44,13 +44,18 @@ def set_style() -> None:
     )
 
 
-def churn_rate_by(df: pd.DataFrame, column: str) -> pd.DataFrame:
-    """Number of customers and churn rate for each value of `column`, highest rate first."""
-    return (
-        df.groupby(column, observed=True)[TARGET]
-        .agg(customers="size", churn_rate="mean")
-        .sort_values("churn_rate", ascending=False)
+def churn_rate_by(
+    df: pd.DataFrame, column: str, sort_by_rate: bool = True
+) -> pd.DataFrame:
+    """Number of customers and churn rate for each value of `column`.
+
+    Sorted by churn rate (highest first), or by the values of `column` if
+    `sort_by_rate` is False (useful for ordered values such as counts).
+    """
+    rates = df.groupby(column, observed=True)[TARGET].agg(
+        customers="size", churn_rate="mean"
     )
+    return rates.sort_values("churn_rate", ascending=False) if sort_by_rate else rates
 
 
 def churn_rate_gaps(df: pd.DataFrame, columns: list[str]) -> pd.Series:
@@ -84,11 +89,15 @@ def plot_target_distribution(y: pd.Series, ax: Axes | None = None) -> Axes:
 
 
 def plot_churn_rate(
-    df: pd.DataFrame, column: str, ax: Axes | None = None, xmax: float | None = None
+    df: pd.DataFrame,
+    column: str,
+    ax: Axes | None = None,
+    xmax: float | None = None,
+    sort_by_rate: bool = True,
 ) -> Axes:
     """Horizontal bars of churn rate per category, with the overall rate as a dashed line."""
-    # barh draws from the bottom up, so reverse to put the highest rate on top
-    rates = churn_rate_by(df, column).iloc[::-1]
+    # barh draws from the bottom up, so reverse to keep the first row on top
+    rates = churn_rate_by(df, column, sort_by_rate).iloc[::-1]
     overall = df[TARGET].mean()
     ax = ax or plt.subplots(figsize=(6, 0.5 * len(rates) + 1))[1]
 
