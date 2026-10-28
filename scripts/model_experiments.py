@@ -1,9 +1,9 @@
-"""Model experiments behind section 4.3 of the notebook.
+"""Model experiments behind section 4.2 of the notebook.
 
 Not used by the notebook or the saved model; kept so the reported results can be
 reproduced. Everything runs on the training set only: the test set stays untouched.
 
-Usage:  uv run python scripts/model_experiments.py   (takes about 6 minutes)
+Usage:  uv run python scripts/model_experiments.py   (takes about 4 minutes)
 """
 
 import numpy as np

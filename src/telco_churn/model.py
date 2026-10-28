@@ -44,7 +44,7 @@ def candidate_models() -> dict[str, ClassifierMixin]:
     """The models compared in the notebook, by display name.
 
     Settings are the best found by hyperparameter searches during development
-    (notebook, section 4.3). The default random forest is included to show
+    (notebook, section 4.2). The default random forest is included to show
     what overfitting looks like.
     """
     return {
