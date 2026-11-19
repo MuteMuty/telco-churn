@@ -18,6 +18,8 @@ Measured once on a held-out test set of 1,409 customers the model never saw duri
 | Precision at threshold 0.31 | 0.529 |
 | F1 at threshold 0.31 | 0.619 |
 
+![ROC curve (AUC 0.84) and precision-recall curve (average precision 0.64, against 0.27 for chance) on the held-out test set, with the chosen threshold of 0.31 marked on both](docs/roc-pr.png)
+
 **In business terms:** contacting the 37% of customers the model flags reaches **3 of every 4 customers who would leave**, and about half of those contacted are real churn risks. With a smaller budget, the riskiest 20% of customers still include half of all churners. The strongest churn signals are **short tenure, a month-to-month contract, fiber internet, and no tech support or online security**.
 
 ## Approach
