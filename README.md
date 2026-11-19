@@ -2,6 +2,8 @@
 
 A telecom company is losing customers to competitors. This project predicts **which customers are likely to leave next month**, so the sales and marketing team can offer them an incentive to stay.
 
+I built it alone as a take-home task for a hiring process (Oct 2026), on IBM's public Telco Customer Churn sample data.
+
 The full analysis, with every decision explained, is in [`notebooks/churn_analysis.ipynb`](notebooks/churn_analysis.ipynb).
 
 ## Results
